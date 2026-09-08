@@ -354,6 +354,12 @@
     {mmsi:"701332018", name:"PETROLERO NORTE", brg:301, rng:3.95, imo:"9345120", callsign:"LU6094", type:"TANKER", sog:7.4, cog:32, hdg:34, navStatus:"CONSTRAINED BY HER DRAUGHT", draught:9.5, length:180, beam:28}
   ];
 
+  const msgsRX = [
+    {from:"PRACTICO 12", time:"08/09 07:45", text:"CONFIRME HORA DE EMBARQUE DEL PRACTICO EN BOYA 3"},
+    {from:"REMOLCADOR SUR", time:"08/09 08:10", text:"SOLICITO PASO LIBRE POR CANAL PRINCIPAL, MANIOBRA EN CURSO"}
+  ];
+  const msgsTX = [];
+
   // ---------- STATE ----------
   const state = {
     screen:"list",
@@ -370,7 +376,12 @@
     etaField:0, // 0 mo 1 da 2 hh 3 mm
     numBuf:0,
     typeStep:0, // 0 = ship type, 1 = cargo
-    typeCursor:0
+    typeCursor:0,
+    // MESSAGE screens
+    msgCursor:0, msgEditStep:0, msgDestIdx:0,
+    msgTxCursor:0, msgRxCursor:0, msgViewSource:null, msgViewIdx:0,
+    // MAINTENANCE screens
+    mtnCursor:0
   };
 
   const charPad = [
@@ -436,6 +447,22 @@
       case "shiptype": return renderShipType();
       case "voysub": return renderVoySub();
       case "voysaved": return renderVoySaved();
+      case "msgmenu": return renderMsgMenu();
+      case "msgeditdest": return renderMsgEditDest();
+      case "msgedittext": return renderMsgEditText();
+      case "msgsent": return renderMsgSent();
+      case "msgtray_tx": return renderMsgTray("tx");
+      case "msgtray_rx": return renderMsgTray("rx");
+      case "msgview": return renderMsgView();
+      case "interrogation": return renderInterrogation();
+      case "longrange": return renderLongRange();
+      case "mtnmenu": return renderMtnMenu();
+      case "selfdiag": return renderSelfDiag();
+      case "commtest": return renderCommTest();
+      case "aisalarm": return renderAisAlarm();
+      case "sensorstatus": return renderSensorStatus();
+      case "eventlog": return renderEventLog();
+      case "swver": return renderSwVer();
       default: return renderList();
     }
   }
@@ -544,6 +571,170 @@
       { text:"EN ESTE SIMULADOR" },
       { text:"", dim:true },
       { text:"[CLR] VOLVER", dim:true }
+    ], -1);
+  }
+
+  // ----- MESSAGE screens -----
+  function renderMsgMenu(){
+    const items = ["1. EDIT AND TX","2. TX TRAY","3. RX TRAY","4. INTERROGATION","5. LONG RANGE"];
+    renderLines("MESSAGE","", items.map(t=>({text:t})), state.msgCursor);
+  }
+
+  function renderMsgEditDest(){
+    const lines = otherShips.map(s=>({text:s.name}));
+    renderLines("EDIT AND TX","DEST", lines, state.msgDestIdx);
+  }
+
+  function renderMsgEditText(){
+    const dest = otherShips[state.msgDestIdx];
+    const rows = [];
+    rows.push({text:`PARA: ${dest.name}`});
+    rows.push({text: state.textBuf || " "});
+    charPad.forEach((row,r)=>{
+      const line = row.map((c,ci)=> (r===state.padRow && ci===state.padCol) ? `[${c}]` : c).join(" ");
+      rows.push({text: line});
+    });
+    renderLines("EDIT AND TX","TXT", rows, -1);
+  }
+
+  function renderMsgSent(){
+    renderLines("MESSAGE","", [
+      {text:"TX COMPLETE"},
+      {text:"", dim:true},
+      {text:"Mensaje enviado y", dim:true},
+      {text:"guardado en TX TRAY.", dim:true},
+      {text:"", dim:true},
+      {text:"[cualquier tecla] OK", dim:true}
+    ], -1);
+  }
+
+  function renderMsgTray(kind){
+    const list = kind==="tx" ? msgsTX : msgsRX;
+    const cursor = kind==="tx" ? state.msgTxCursor : state.msgRxCursor;
+    if(list.length===0){
+      renderLines(kind==="tx"?"TX TRAY":"RX TRAY","", [
+        {text:"(SIN MENSAJES)", dim:true}
+      ], -1);
+      return;
+    }
+    const lines = list.map(m=>({text:`${m.time}  ${kind==="tx"?"A: "+m.to:"DE: "+m.from}`}));
+    renderLines(kind==="tx"?"TX TRAY":"RX TRAY", `${list.length}`, lines, cursor);
+  }
+
+  function renderMsgView(){
+    const list = state.msgViewSource==="tx" ? msgsTX : msgsRX;
+    const m = list[state.msgViewIdx];
+    if(!m){ state.screen = state.msgViewSource==="tx"?"msgtray_tx":"msgtray_rx"; return render(); }
+    const who = state.msgViewSource==="tx" ? `A: ${m.to}` : `DE: ${m.from}`;
+    // wrap text into ~20-char lines
+    const words = m.text.split(" ");
+    const wrapped = [];
+    let line = "";
+    words.forEach(w=>{
+      if((line+" "+w).trim().length>20){ wrapped.push(line.trim()); line=w; }
+      else line = (line+" "+w).trim();
+    });
+    if(line) wrapped.push(line);
+    const rows = [{text:who},{text:m.time, dim:true},{text:"", dim:true}].concat(wrapped.map(t=>({text:t})));
+    renderLines("MESSAGE","", rows, -1);
+  }
+
+  function renderInterrogation(){
+    renderLines("INTERROGATION","", [
+      {text:"Solicita a otro buque"},
+      {text:"el envío de un dato"},
+      {text:"puntual (ej. datos de"},
+      {text:"viaje) sin usar voz."},
+      {text:"", dim:true},
+      {text:"No implementado en", dim:true},
+      {text:"este simulador.", dim:true}
+    ], -1);
+  }
+
+  function renderLongRange(){
+    renderLines("LONG RANGE MSG","", [
+      {text:"Mensajería para"},
+      {text:"estaciones fuera del"},
+      {text:"alcance VHF (satelital"},
+      {text:"/ costero de LR)."},
+      {text:"", dim:true},
+      {text:"No implementado en", dim:true},
+      {text:"este simulador.", dim:true}
+    ], -1);
+  }
+
+  // ----- MAINTENANCE screens -----
+  function renderMtnMenu(){
+    const items = ["1. SELF DIAGNOSIS","2. COMM. TEST","3. AIS ALARM","4. SENSOR STATUS","5. EVENT LOG","6. SOFTWARE VER."];
+    renderLines("MAINTENANCE","", items.map(t=>({text:t})), state.mtnCursor);
+  }
+
+  function renderSelfDiag(){
+    renderLines("SELF DIAGNOSIS","", [
+      {text:"TRANSMITTER: OK"},
+      {text:"RECEIVER CH A: OK"},
+      {text:"RECEIVER CH B: OK"},
+      {text:"GPS RECEIVER: OK"},
+      {text:"", dim:true},
+      {text:"[CLR] VOLVER", dim:true}
+    ], -1);
+  }
+
+  function renderCommTest(){
+    renderLines("COMM. TEST","", [
+      {text:"TX TEST: OK"},
+      {text:"RX TEST: OK"},
+      {text:"VSWR: NORMAL"},
+      {text:"", dim:true},
+      {text:"[CLR] VOLVER", dim:true}
+    ], -1);
+  }
+
+  function renderAisAlarm(){
+    renderLines("AIS ALARM","", [
+      {text:"ANTENNA VSWR: NORMAL"},
+      {text:"TX MALFUNCTION: NORMAL"},
+      {text:"MKD/TRX LINK: NORMAL"},
+      {text:"GENERAL FAILURE: NORMAL"},
+      {text:"", dim:true},
+      {text:"[CLR] VOLVER", dim:true}
+    ], -1);
+  }
+
+  function renderSensorStatus(){
+    const posn = "IN USE";
+    const utc = "IN USE";
+    const sogcog = own.sog>0 ? "VALID" : "NO SENSOR";
+    const hdgSt = "VALID";
+    const rotSt = "VALID";
+    renderLines("SENSOR STATUS","", [
+      {text:`POSN (GPS): ${posn}`},
+      {text:`UTC CLOCK: ${utc}`},
+      {text:`SOG/COG: ${sogcog}`},
+      {text:`HEADING: ${hdgSt}`},
+      {text:`ROT: ${rotSt}`},
+      {text:"", dim:true},
+      {text:"[CLR] VOLVER", dim:true}
+    ], -1);
+  }
+
+  function renderEventLog(){
+    renderLines("EVENT LOG","", [
+      {text:"08/09 14:02 POWER ON", dim:true},
+      {text:"08/09 14:05 GPS FIX OK", dim:true},
+      {text:"08/09 14:10 VOY DATA SET", dim:true},
+      {text:"", dim:true},
+      {text:"[CLR] VOLVER", dim:true}
+    ], -1);
+  }
+
+  function renderSwVer(){
+    renderLines("SOFTWARE VERSION","", [
+      {text:"TRX SW: ESNF-SIM 1.0"},
+      {text:"CONTROLLER SW: ESNF-SIM 1.0"},
+      {text:"CONTROLLER LAN: N/A"},
+      {text:"", dim:true},
+      {text:"[CLR] VOLVER", dim:true}
     ], -1);
   }
 
@@ -707,6 +898,8 @@
         else if(key==="DOWN") state.cursor = Math.min(3, state.cursor+1);
         else if(key==="ENT"){
           if(state.cursor===0){ openVoyageData(); state.screen="voy"; state.voyPage=1; state.cursor=0; }
+          else if(state.cursor===1){ state.msgCursor=0; state.screen="msgmenu"; }
+          else if(state.cursor===2){ state.mtnCursor=0; state.screen="mtnmenu"; }
           else { state.screen="stub"; }
         }
         else if(key==="CLR"){ state.screen="list"; }
@@ -714,6 +907,96 @@
 
       case "stub":
         if(key==="CLR"){ state.screen="mainmenu"; }
+        break;
+
+      // ----- MESSAGE flow -----
+      case "msgmenu":
+        if(key==="UP") state.msgCursor = Math.max(0, state.msgCursor-1);
+        else if(key==="DOWN") state.msgCursor = Math.min(4, state.msgCursor+1);
+        else if(key==="ENT"){
+          if(state.msgCursor===0){ state.msgDestIdx=0; state.screen="msgeditdest"; }
+          else if(state.msgCursor===1){ state.msgTxCursor=0; state.screen="msgtray_tx"; }
+          else if(state.msgCursor===2){ state.msgRxCursor=0; state.screen="msgtray_rx"; }
+          else if(state.msgCursor===3){ state.screen="interrogation"; }
+          else { state.screen="longrange"; }
+        }
+        else if(key==="CLR"){ state.screen="mainmenu"; }
+        break;
+
+      case "msgeditdest":
+        if(key==="UP") state.msgDestIdx = Math.max(0, state.msgDestIdx-1);
+        else if(key==="DOWN") state.msgDestIdx = Math.min(otherShips.length-1, state.msgDestIdx+1);
+        else if(key==="ENT"){ state.textBuf=""; state.padRow=0; state.padCol=0; state.screen="msgedittext"; }
+        else if(key==="CLR"){ state.screen="msgmenu"; }
+        break;
+
+      case "msgedittext":
+        if(key==="UP") state.padRow = Math.max(0, state.padRow-1);
+        else if(key==="DOWN") state.padRow = Math.min(charPad.length-1, state.padRow+1);
+        else if(key==="LEFT") state.padCol = Math.max(0, state.padCol-1);
+        else if(key==="RIGHT") state.padCol = Math.min(charPad[state.padRow].length-1, state.padCol+1);
+        else if(key==="ENT"){
+          const ch = charPad[state.padRow][state.padCol];
+          if(ch==="[OK]"){
+            if(state.textBuf.trim()){
+              msgsTX.push({ to: otherShips[state.msgDestIdx].name, time: new Date().toISOString().substring(5,16).replace("T"," "), text: state.textBuf.trim() });
+            }
+            state.screen="msgsent";
+          }
+          else if(ch==="[EXIT]"){ state.screen="msgmenu"; }
+          else if(ch==="[C]"){ state.textBuf = state.textBuf.slice(0,-1); }
+          else if(ch==="[AC]"){ state.textBuf = ""; }
+          else if(ch==="!"){ state.textBuf += "!"; }
+          else if(state.textBuf.length<40){ state.textBuf += ch; }
+        }
+        else if(key==="CLR"){ state.screen="msgeditdest"; }
+        state.padCol = Math.min(state.padCol, charPad[state.padRow].length-1);
+        break;
+
+      case "msgsent":
+        state.screen="msgmenu";
+        break;
+
+      case "msgtray_tx":
+        if(key==="UP") state.msgTxCursor = Math.max(0, state.msgTxCursor-1);
+        else if(key==="DOWN") state.msgTxCursor = Math.min(Math.max(0,msgsTX.length-1), state.msgTxCursor+1);
+        else if(key==="ENT" && msgsTX.length>0){ state.msgViewSource="tx"; state.msgViewIdx=state.msgTxCursor; state.screen="msgview"; }
+        else if(key==="CLR"){ state.screen="msgmenu"; }
+        break;
+
+      case "msgtray_rx":
+        if(key==="UP") state.msgRxCursor = Math.max(0, state.msgRxCursor-1);
+        else if(key==="DOWN") state.msgRxCursor = Math.min(Math.max(0,msgsRX.length-1), state.msgRxCursor+1);
+        else if(key==="ENT" && msgsRX.length>0){ state.msgViewSource="rx"; state.msgViewIdx=state.msgRxCursor; state.screen="msgview"; }
+        else if(key==="CLR"){ state.screen="msgmenu"; }
+        break;
+
+      case "msgview":
+        if(key==="CLR"){ state.screen = state.msgViewSource==="tx" ? "msgtray_tx" : "msgtray_rx"; }
+        break;
+
+      case "interrogation":
+        if(key==="CLR"){ state.screen="msgmenu"; }
+        break;
+
+      case "longrange":
+        if(key==="CLR"){ state.screen="msgmenu"; }
+        break;
+
+      // ----- MAINTENANCE flow -----
+      case "mtnmenu":
+        if(key==="UP") state.mtnCursor = Math.max(0, state.mtnCursor-1);
+        else if(key==="DOWN") state.mtnCursor = Math.min(5, state.mtnCursor+1);
+        else if(key==="ENT"){
+          const targets = ["selfdiag","commtest","aisalarm","sensorstatus","eventlog","swver"];
+          state.screen = targets[state.mtnCursor];
+        }
+        else if(key==="CLR"){ state.screen="mainmenu"; }
+        break;
+
+      case "selfdiag": case "commtest": case "aisalarm":
+      case "sensorstatus": case "eventlog": case "swver":
+        if(key==="CLR"){ state.screen="mtnmenu"; }
         break;
 
       case "voy": {
