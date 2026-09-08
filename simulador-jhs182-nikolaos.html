@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador AIS · ENF</title>
+<style>
+  :root{
+    --bezel:#3a3f42;
+    --bezel-dark:#25282a;
+    --bezel-light:#4a4f52;
+    --lcd-bg:#a9c2b4;
+    --lcd-bg-dim:#9db6a8;
+    --lcd-text:#1c2b22;
+    --lcd-sel-bg:#1c2b22;
+    --lcd-sel-text:#c7dccc;
+    --key:#5a5f62;
+    --key-face:#6a6f72;
+    --key-text:#e8e8e6;
+    --page-bg:#0a0f12;
+    --mono: "Courier New", ui-monospace, "SF Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--page-bg);
+    color:#dceaea;
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:16px;
+  }
+
+  .wrap{ max-width:920px; margin:0 auto; }
+
+  .heading{
+    text-align:center;
+    margin-bottom:16px;
+  }
+  .heading .eyebrow{
+    font-size:11px;
+    color:#7c9398;
+    letter-spacing:.03em;
+  }
+  .heading h1{
+    margin:2px 0 0 0;
+    font-size:18px;
+    font-weight:600;
+    color:#dceaea;
+  }
+
+  /* ===== PHYSICAL UNIT ===== */
+  .unit{
+    background:linear-gradient(180deg, var(--bezel-light), var(--bezel) 12%, var(--bezel-dark));
+    border-radius:10px;
+    padding:16px 16px 10px 16px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+    max-width:520px;
+    margin:0 auto;
+    border:1px solid #1c1f21;
+  }
+  .unit-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:2px 4px 10px 4px;
+  }
+  .unit-logo{
+    font-weight:800;
+    font-size:15px;
+    color:#eef0ee;
+    letter-spacing:.04em;
+  }
+  .unit-model{
+    font-size:10.5px;
+    color:#b9bdbc;
+    letter-spacing:.03em;
+  }
+
+  .screen-panel{
+    display:flex;
+    gap:12px;
+    align-items:flex-start;
+  }
+
+  /* LCD */
+  .lcd-frame{
+    background:#1c1f21;
+    border-radius:5px;
+    padding:8px;
+    flex:1;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.6);
+  }
+  .lcd{
+    background: linear-gradient(180deg, var(--lcd-bg), var(--lcd-bg-dim));
+    border-radius:2px;
+    padding:8px 9px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    line-height:1.55;
+    color:var(--lcd-text);
+    min-height:200px;
+    letter-spacing:.02em;
+    position:relative;
+    overflow:hidden;
+  }
+  .lcd-statusbar{
+    display:flex;
+    justify-content:space-between;
+    font-size:10px;
+    color:var(--lcd-text);
+    opacity:.75;
+    border-bottom:1px solid rgba(28,43,34,0.25);
+    padding-bottom:3px;
+    margin-bottom:4px;
+  }
+  .lcd-row{
+    white-space:pre;
+    padding:1px 2px;
+    min-height:1.5em;
+  }
+  .lcd-row.sel{
+    background:var(--lcd-sel-bg);
+    color:var(--lcd-sel-text);
+    border-radius:1px;
+  }
+  .lcd-row.dim{ opacity:.6; }
+  .lcd-row.title{
+    font-weight:700;
+    opacity:.85;
+  }
+  .lcd-hint{
+    position:absolute;
+    bottom:4px;
+    right:8px;
+    font-size:9.5px;
+    opacity:.55;
+  }
+
+  /* Controls */
+  .controls{
+    width:118px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+  }
+
+  .dial-wrap{ position:relative; width:100px; height:100px; }
+  .dial{
+    width:100px; height:100px;
+    border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #7a7f82, #3c4042 70%);
+    box-shadow: inset 0 2px 4px rgba(255,255,255,0.15), inset 0 -3px 6px rgba(0,0,0,0.5), 0 3px 6px rgba(0,0,0,0.4);
+    position:relative;
+  }
+  .dial-label{
+    position:absolute;
+    top:-16px; left:50%; transform:translateX(-50%);
+    font-size:8.5px;
+    color:#9aa0a0;
+    letter-spacing:.03em;
+    white-space:nowrap;
+  }
+  .dial-zone{
+    position:absolute;
+    background:transparent;
+    border:none;
+    cursor:pointer;
+    color:#cfd3d2;
+    font-size:11px;
+  }
+  .dial-zone:active{ color:#fff; }
+  .dz-up{ top:4px; left:50%; transform:translateX(-50%); }
+  .dz-down{ bottom:4px; left:50%; transform:translateX(-50%); }
+  .dz-left{ left:6px; top:50%; transform:translateY(-50%); }
+  .dz-right{ right:6px; top:50%; transform:translateY(-50%); }
+  .dz-center{
+    top:50%; left:50%; transform:translate(-50%,-50%);
+    width:36px; height:36px;
+    border-radius:50%;
+    background:linear-gradient(180deg,#8a8f92,#4a4e50);
+    color:#eee;
+    font-size:9.5px;
+    font-weight:700;
+    box-shadow: inset 0 1px 2px rgba(255,255,255,.3), 0 2px 3px rgba(0,0,0,.5);
+  }
+
+  .keyrow{ display:flex; gap:6px; }
+  .keyrow.wide{ width:100%; justify-content:space-between; }
+  .key{
+    background:linear-gradient(180deg, var(--key-face), var(--key));
+    color:var(--key-text);
+    border:none;
+    border-radius:4px;
+    font-family:var(--sans);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.02em;
+    padding:7px 4px;
+    cursor:pointer;
+    box-shadow: 0 2px 2px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+    min-width:34px;
+  }
+  .key:active{ transform:translateY(1px); box-shadow:none; }
+  .key.menu{ background:linear-gradient(180deg,#6d7376,#4a4f52); }
+
+  .unit-bottom{
+    text-align:center;
+    padding-top:12px;
+    font-size:9px;
+    color:#9aa0a0;
+    letter-spacing:.02em;
+  }
+
+  .footnote{
+    max-width:520px;
+    margin:14px auto 0 auto;
+    font-size:11px;
+    color:#7c9398;
+    line-height:1.5;
+    text-align:center;
+  }
+
+  .keyhelp{
+    max-width:520px;
+    margin:10px auto 0 auto;
+    font-size:10.5px;
+    color:#7c9398;
+    background:#121a1f;
+    border:1px solid #2a363d;
+    border-radius:5px;
+    padding:8px 12px;
+    line-height:1.6;
+  }
+  .keyhelp b{ color:#dceaea; }
+
+  @media (max-width:560px){
+    .unit{ padding:12px; }
+    .screen-panel{ flex-direction:column; align-items:center; }
+    .controls{ width:100%; flex-direction:row; justify-content:center; flex-wrap:wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="heading">
+    <span class="eyebrow">ESCUELA NACIONAL FLUVIAL — NAVEGACIÓN ELECTRÓNICA · UNIDAD VI</span>
+    <h1>Simulador de Consola AIS — ESNF AIS-T182 · B/M NIKOLAOS</h1>
+  </div>
+
+  <div class="unit">
+    <div class="unit-top">
+      <span class="unit-logo">ESNF</span>
+      <span class="unit-model">AIS TRAINER</span>
+    </div>
+
+    <div class="screen-panel">
+      <div class="lcd-frame">
+        <div class="lcd" id="lcd"></div>
+      </div>
+
+      <div class="controls">
+        <div class="dial-wrap">
+          <span class="dial-label">MENU / POWER</span>
+          <div class="dial">
+            <button class="dial-zone dz-up" data-key="UP">▲</button>
+            <button class="dial-zone dz-down" data-key="DOWN">▼</button>
+            <button class="dial-zone dz-left" data-key="LEFT">◄</button>
+            <button class="dial-zone dz-right" data-key="RIGHT">►</button>
+            <button class="dial-zone dz-center" data-key="ENT">ENT</button>
+          </div>
+        </div>
+        <div class="keyrow wide">
+          <button class="key menu" data-key="MENU">MENU</button>
+          <button class="key" data-key="DISP">DISP</button>
+        </div>
+        <div class="keyrow wide">
+          <button class="key" data-key="SUB">SUB</button>
+          <button class="key" data-key="CLR">CLR</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="unit-bottom">PILOT PLUG IS AVAILABLE ON THE BACK &nbsp;·&nbsp; ESNF AIS-T182</div>
+  </div>
+
+  <div class="keyhelp">
+    <b>MENU</b> — abre el menú principal · <b>Dial ▲▼</b> — mueve el cursor / cambia valores · <b>◄►</b> — mueve entre campos o caracteres · <b>ENT</b> — confirma / entra al ítem · <b>CLR</b> — vuelve al nivel anterior · <b>DISP</b> — cambia entre pantallas (lista de blancos / datos propios) · <b>SUB</b> — submenú (guardar cambios)
+  </div>
+
+  <p class="footnote">Réplica funcional con fines didácticos, basada en la estructura de menú y terminología estándar de un controlador AIS Clase A (Voyage Data Setting, Own Ship's Detail, Other Ship's Detail), común a los equipos comerciales del mercado. No sustituye a ningún equipo homologado ni genera transmisión AIS real.</p>
+
+</div>
+
+<script>
+(function(){
+
+  // ---------- OWN SHIP STATIC DATA (NIKOLAOS) ----------
+  const own = {
+    mmsi:"237593100", imo:"8611506", name:"NIKOLAOS", callsign:"SY2709",
+    bow:60, str:35.8, por:9, sta:8, length:95.8, beam:17,
+    posnDevice:"GPS",
+    // voyage data (editable)
+    navStatusIdx:0,
+    destination:"PIRAEUS",
+    eta:{mo:4, da:17, hh:22, mm:0},
+    draught:9.0,
+    persons:145,
+    shipTypeCode:69,
+    cargoSuffix:9,
+    // dynamic (auto)
+    lat:-32.9500, lon:-60.6500, sog:8.5, cog:145, hdg:148, rot:0
+  };
+
+  const navStatusList = [
+    "UNDER WAY USING ENGINE","AT ANCHOR","NOT UNDER COMMAND",
+    "RESTRICTED MANOEUVRABILITY","CONSTRAINED BY HER DRAUGHT","MOORED",
+    "AGROUND","ENGAGED IN FISHING","UNDER WAY SAILING",
+    "RESERVED FOR HSC","RESERVED FOR WIG","TOWING ASTERN",
+    "PUSHING AHEAD/TOWING ALONGSIDE","RESERVED FOR FUTURE USE","NOT DEFINED"
+  ];
+
+  const shipTypeTable = [
+    {code:0,label:"NOT AVAILABLE"},{code:30,label:"FISHING VESSEL"},
+    {code:31,label:"TOWING VESSEL"},{code:35,label:"MILITARY OPERATION"},
+    {code:36,label:"SAILING VESSEL"},{code:37,label:"PLEASURE CRAFT"},
+    {code:50,label:"PILOT VESSEL"},{code:52,label:"TUGS"},
+    {code:55,label:"LAW ENFORCEMENT VESSEL"},{code:60,label:"PASSENGER SHIPS"},
+    {code:70,label:"CARGO SHIPS"},{code:80,label:"TANKER"},
+    {code:90,label:"OTHER TYPE OF SHIP"}
+  ];
+  const cargoSuffixTable = [
+    {code:1,label:"CATEGORY X (DG/HS/MP)"},{code:2,label:"CATEGORY Y (DG/HS/MP)"},
+    {code:3,label:"CATEGORY Z (DG/HS/MP)"},{code:4,label:"CATEGORY OS"},
+    {code:9,label:"NO ADDITIONAL INFORMATION"},{code:0,label:"ALL SHIPS OF THIS TYPE"}
+  ];
+
+  function shipTypeLabel(code){
+    const t = shipTypeTable.find(t=>t.code===Math.floor(code/10)*10) || shipTypeTable.find(t=>t.code===code);
+    return t ? t.label : "UNKNOWN";
+  }
+  function cargoLabel(code){
+    const c = cargoSuffixTable.find(c=>c.code===code);
+    return c ? c.label : "—";
+  }
+
+  const otherShips = [
+    {mmsi:"701023456", name:"PRACTICO 12", brg:219, rng:0.20, imo:"—", callsign:"LU2201", type:"PILOT VESSEL", sog:6.0, cog:210, hdg:212, navStatus:"UNDER WAY USING ENGINE", draught:3.5, length:18, beam:5},
+    {mmsi:"701098213", name:"REMOLCADOR SUR", brg:152, rng:0.44, imo:"9012345", callsign:"LU3390", type:"TOWING VESSEL", sog:4.2, cog:88, hdg:90, navStatus:"TOWING ASTERN", draught:4.0, length:32, beam:9},
+    {mmsi:"701145007", name:"CARGO ESTE", brg:192, rng:1.30, imo:"8823410", callsign:"LU4471", type:"CARGO SHIPS", sog:9.8, cog:145, hdg:147, navStatus:"UNDER WAY USING ENGINE", draught:7.8, length:140, beam:20},
+    {mmsi:"701207764", name:"BARCAZA CONVOY", brg:75, rng:2.60, imo:"—", callsign:"LU5182", type:"TOWING VESSEL", sog:5.1, cog:270, hdg:268, navStatus:"PUSHING AHEAD/TOWING ALONGSIDE", draught:3.2, length:60, beam:11},
+    {mmsi:"701332018", name:"PETROLERO NORTE", brg:301, rng:3.95, imo:"9345120", callsign:"LU6094", type:"TANKER", sog:7.4, cog:32, hdg:34, navStatus:"CONSTRAINED BY HER DRAUGHT", draught:9.5, length:180, beam:28}
+  ];
+
+  // ---------- STATE ----------
+  const state = {
+    screen:"list",
+    cursor:0,
+    listCursor:0,
+    voyPage:1,
+    subOpen:false,
+    // sub-states for own/other detail paging
+    ownTRXPage:1, own1Page:1, own2Page:1, otherPage:1,
+    otherIdx:0,
+    // edit buffers
+    navStatusCursor:0,
+    padRow:0, padCol:0, textBuf:"",
+    etaField:0, // 0 mo 1 da 2 hh 3 mm
+    numBuf:0,
+    typeStep:0, // 0 = ship type, 1 = cargo
+    typeCursor:0
+  };
+
+  const charPad = [
+    "ABCDEFGHIJKLMNOPQRSTU".split(""),
+    "VWXYZ.0123456789[\\]_".split(""),
+    "\"#$%&'()?@+-*/^,:;<=>".split(""),
+    ["!","[C]","[AC]","[OK]","[EXIT]"]
+  ];
+
+  // Voyage Data draft: edits happen here first; only SUB > SET commits them to `own`
+  // (matches real AIS behaviour: unsaved changes are not transmitted)
+  let draft = null;
+  function openVoyageData(){
+    draft = {
+      navStatusIdx: own.navStatusIdx,
+      destination: own.destination,
+      eta: { ...own.eta },
+      draught: own.draught,
+      persons: own.persons,
+      shipTypeCode: own.shipTypeCode,
+      cargoSuffix: own.cargoSuffix
+    };
+  }
+
+  const lcdEl = document.getElementById("lcd");
+
+  function pad(str, n){ str = String(str); return str.length>=n ? str.slice(0,n) : str + " ".repeat(n-str.length); }
+  function fmtETA(eta){ return String(eta.mo).padStart(2,"0")+"/"+String(eta.da).padStart(2,"0")+" "+String(eta.hh).padStart(2,"0")+":"+String(eta.mm).padStart(2,"0"); }
+  function fmtCoord(v,isLat){
+    const n=v, dir = isLat?(n>=0?"N":"S"):(n>=0?"E":"O");
+    const abs=Math.abs(n), deg=Math.floor(abs), min=((abs-deg)*60).toFixed(2);
+    return deg+"°"+min+"'"+dir;
+  }
+
+  // ---------- RENDER ----------
+  function renderLines(title, page, lines, selIdx){
+    let html = "";
+    html += `<div class="lcd-statusbar"><span>${title}</span><span>${page||""}</span></div>`;
+    lines.forEach((ln,i)=>{
+      const cls = ["lcd-row"];
+      if(i===selIdx) cls.push("sel");
+      if(ln.dim) cls.push("dim");
+      html += `<div class="${cls.join(' ')}">${(ln.text!==undefined?ln.text:ln)}</div>`;
+    });
+    lcdEl.innerHTML = html;
+  }
+
+  function render(){
+    switch(state.screen){
+      case "list": return renderList();
+      case "ownTRX": return renderOwnTRX();
+      case "own1": return renderOwn1();
+      case "own2": return renderOwn2();
+      case "otherDetail": return renderOtherDetail();
+      case "mainmenu": return renderMainMenu();
+      case "stub": return renderStub();
+      case "voy": return renderVoy();
+      case "navstatus": return renderNavStatus();
+      case "destination": return renderDestination();
+      case "eta": return renderEta();
+      case "draught": return renderDraught();
+      case "persons": return renderPersons();
+      case "shiptype": return renderShipType();
+      case "voysub": return renderVoySub();
+      case "voysaved": return renderVoySaved();
+      default: return renderList();
+    }
+  }
+
+  function renderList(){
+    const lines = otherShips.map((s,i)=> {
+      const sel = i===state.listCursor;
+      return { text: `${String(s.brg).padStart(3,' ')}° ${s.rng.toFixed(2)}NM  ${s.name}` };
+    });
+    lines.push({ text: `${otherShips.length}/200`, dim:true });
+    renderLines("LIST SORT: RANGE","", lines, state.listCursor);
+  }
+
+  function renderOwnTRX(){
+    renderLines("OWN SHIP'S TRX", state.ownTRXPage+"/2", [
+      `CH A: 2087   CH B: 2088`,
+      `TX POWER: HIGH`,
+      `MODE: TX/RX (A,B)`,
+      { text:`SOURCE: MANUAL INPUT`, dim:true },
+      { text:`UTC: ${new Date().toISOString().substring(11,19)}`, dim:true }
+    ], -1);
+  }
+
+  function renderOwn1(){
+    const p = state.own1Page;
+    let lines = [];
+    if(p===1){
+      lines = [
+        `MMSI: ${own.mmsi}`,
+        `NAME: ${own.name}`,
+        `IMO NO: ${own.imo}`,
+        `CALL SIGN: ${own.callsign}`
+      ];
+    } else if(p===2){
+      lines = [
+        `ANT POSN   BOW:${own.bow}M STR:${own.str}M`,
+        `           POR:${own.por}M STA:${own.sta}M`,
+        `LENGTH: ${own.length}M  BEAM: ${own.beam}M`
+      ];
+    } else if(p===3){
+      lines = [
+        `POSN DEVICE: ${own.posnDevice}`,
+        `NAV STATUS:`,
+        `  ${navStatusList[own.navStatusIdx]}`
+      ];
+    } else if(p===4){
+      lines = [
+        `DESTINATION: ${own.destination}`,
+        `ETA (M/D,H:M): ${fmtETA(own.eta)}`
+      ];
+    } else if(p===5){
+      lines = [
+        `DRAUGHT: ${own.draught.toFixed(1)}M`,
+        `PERSONS: ${String(own.persons).padStart(4,"0")}`,
+        `TYPE: ${shipTypeLabel(own.shipTypeCode)}`
+      ];
+    } else {
+      lines = [ `CARGO/STATUS:`, `  ${cargoLabel(own.cargoSuffix)}` ];
+    }
+    renderLines("OWN SHIP'S DETAIL 1", p+"/6", lines, -1);
+  }
+
+  function renderOwn2(){
+    const p = state.own2Page;
+    let lines = [];
+    if(p===1){
+      lines = [
+        `POSN DEVICE: ${own.posnDevice}`,
+        `LAT: ${fmtCoord(own.lat,true)}`,
+        `LON: ${fmtCoord(own.lon,false)}`,
+        `SOG: ${own.sog.toFixed(1)}kn  COG: ${own.cog}°`
+      ];
+    } else {
+      lines = [
+        `HDG: ${own.hdg}°`,
+        `ROT: ${own.rot.toFixed(1)}°/min`,
+        { text:`POSN QUALITY: >10M`, dim:true },
+        { text:`RAIM: NO USE`, dim:true }
+      ];
+    }
+    renderLines("OWN SHIP'S DETAIL 2", p+"/2", lines, -1);
+  }
+
+  function renderOtherDetail(){
+    const s = otherShips[state.otherIdx];
+    const p = state.otherPage;
+    let lines = [];
+    if(p===1){
+      lines = [ `MMSI: ${s.mmsi}`, `NAME: ${s.name}`, `IMO NO: ${s.imo}`, `CALL SIGN: ${s.callsign}` ];
+    } else if(p===2){
+      lines = [ `SOG: ${s.sog.toFixed(1)}kn  COG: ${s.cog}°`, `HDG: ${s.hdg}°`, `NAV STATUS:`, `  ${s.navStatus}`, `BRG: ${s.brg}°  RNG: ${s.rng.toFixed(2)}NM` ];
+    } else {
+      lines = [ `TYPE OF SHIP:`, `  ${s.type}`, `LENGTH: ${s.length}M  BEAM: ${s.beam}M`, `DRAUGHT: ${s.draught.toFixed(1)}M` ];
+    }
+    renderLines("OTHER SHIP'S DETAIL", p+"/3", lines, -1);
+  }
+
+  function renderMainMenu(){
+    const items = ["1. VOYAGE DATA","2. MESSAGE","3. MAINTENANCE","4. SET UP"];
+    renderLines("MAIN MENU","", items.map(t=>({text:t})), state.cursor);
+  }
+
+  function renderStub(){
+    renderLines("MAIN MENU","", [
+      { text:"NO DISPONIBLE" },
+      { text:"EN ESTE SIMULADOR" },
+      { text:"", dim:true },
+      { text:"[CLR] VOLVER", dim:true }
+    ], -1);
+  }
+
+  function renderVoy(){
+    const p = state.voyPage;
+    let items = [];
+    if(p===1){
+      items = [
+        `1.NAV.STATUS:`,
+        `  ${navStatusList[draft.navStatusIdx]}`,
+        `2.DESTINATION:`,
+        `  ${draft.destination}`,
+        `3.ETA:`,
+        `  ${fmtETA(draft.eta)}`
+      ];
+    } else if(p===2){
+      items = [
+        `4.DRAUGHT:`,
+        `  ${draft.draught.toFixed(1)}M`,
+        `5.PERSONS ON BOARD:`,
+        `  ${String(draft.persons).padStart(4,"0")}`
+      ];
+    } else {
+      items = [
+        `6.TYPE OF SHIP/CARGO`,
+        `  ${draft.shipTypeCode} ${shipTypeLabel(draft.shipTypeCode)}`,
+        `  ${cargoLabel(draft.cargoSuffix)}`
+      ];
+    }
+    const selectableIdx = p===1 ? [0,2,4] : p===2 ? [0,2] : [0];
+    const selRow = selectableIdx[state.cursor] !== undefined ? selectableIdx[state.cursor] : 0;
+    const lines = items.map((t,i)=>({text:t}));
+    renderLines("VOYAGE DATA", p+"/3", lines, selRow);
+  }
+
+  function renderVoySub(){
+    renderLines("VOYAGE DATA","", [
+      {text:"*SUB MENU*"},
+      {text: state.cursor===0 ? "[SET]" : "SET"},
+      {text: state.cursor===1 ? "[EXIT]" : "EXIT"},
+      {text:"", dim:true},
+      {text:"SET = guarda y transmite", dim:true},
+      {text:"EXIT = descarta cambios", dim:true}
+    ], -1);
+  }
+
+  function renderVoySaved(){
+    renderLines("VOYAGE DATA","", [
+      {text:"SET COMPLETE"},
+      {text:"", dim:true},
+      {text:"Datos actualizados y", dim:true},
+      {text:"listos para transmitir.", dim:true},
+      {text:"", dim:true},
+      {text:"[cualquier tecla] OK", dim:true}
+    ], -1);
+  }
+
+  function renderNavStatus(){
+    const lines = navStatusList.map((n,i)=>({text:n}));
+    renderLines("NAV. STATUS","", lines.slice(state.navStatusCursor>4?state.navStatusCursor-4:0, (state.navStatusCursor>4?state.navStatusCursor-4:0)+6),
+      Math.min(state.navStatusCursor, 5));
+  }
+
+  function renderDestination(){
+    const rows = [];
+    rows.push({text:`DESTINATION:`});
+    rows.push({text: state.textBuf || " "});
+    charPad.forEach((row,r)=>{
+      const line = row.map((c,ci)=> (r===state.padRow && ci===state.padCol) ? `[${c}]` : c).join(" ");
+      rows.push({text: line});
+    });
+    renderLines("DEST. INPUT","", rows, -1);
+  }
+
+  function renderEta(){
+    const f = ["MO","DA","HH","MM"];
+    const vals = [draft.eta.mo, draft.eta.da, draft.eta.hh, draft.eta.mm];
+    const built = f.map((lbl,i)=>{
+      const v = String(vals[i]).padStart(2,"0");
+      return i===state.etaField ? `[${v}]` : v;
+    }).join("/");
+    renderLines("ETA INPUT","", [
+      {text:"ETA (M/D,H:M):"},
+      {text: built},
+      {text:"", dim:true},
+      {text:"▲▼ cambia valor", dim:true},
+      {text:"◄► cambia campo", dim:true}
+    ], -1);
+  }
+
+  function renderDraught(){
+    renderLines("DRAUGHT INPUT","", [
+      {text:"4.DRAUGHT:"},
+      {text: `[${draft.draught.toFixed(1)}] M`},
+      {text:"", dim:true},
+      {text:"▲▼ ±0.1 M", dim:true}
+    ], -1);
+  }
+
+  function renderPersons(){
+    renderLines("PERSONS INPUT","", [
+      {text:"5.PERSONS ON BOARD:"},
+      {text: `[${String(draft.persons).padStart(4,"0")}]`},
+      {text:"", dim:true},
+      {text:"▲▼ ±1", dim:true}
+    ], -1);
+  }
+
+  function renderShipType(){
+    if(state.typeStep===0){
+      const lines = shipTypeTable.map(t=>({text:`${t.code} ${t.label}`}));
+      renderLines("TYPE OF SHIP","", lines, state.typeCursor);
+    } else {
+      const lines = cargoSuffixTable.map(c=>({text:c.label}));
+      renderLines("CARGO TYPE","", lines, state.typeCursor);
+    }
+  }
+
+  // ---------- KEY HANDLING ----------
+  function handleKey(key){
+    switch(state.screen){
+
+      case "list":
+        if(key==="UP") state.listCursor = Math.max(0, state.listCursor-1);
+        else if(key==="DOWN") state.listCursor = Math.min(otherShips.length-1, state.listCursor+1);
+        else if(key==="ENT"){ state.otherIdx=state.listCursor; state.otherPage=1; state.screen="otherDetail"; }
+        else if(key==="DISP"){ state.screen="ownTRX"; }
+        else if(key==="MENU"){ state.screen="mainmenu"; state.cursor=0; }
+        break;
+
+      case "ownTRX":
+        if(key==="DISP"){ state.screen="own1"; state.own1Page=1; }
+        else if(key==="CLR"){ state.screen="list"; }
+        else if(key==="MENU"){ state.screen="mainmenu"; state.cursor=0; }
+        break;
+
+      case "own1":
+        if(key==="UP") state.own1Page = Math.max(1, state.own1Page-1);
+        else if(key==="DOWN") state.own1Page = Math.min(6, state.own1Page+1);
+        else if(key==="DISP"){ state.screen="own2"; state.own2Page=1; }
+        else if(key==="CLR"){ state.screen="list"; }
+        else if(key==="MENU"){ state.screen="mainmenu"; state.cursor=0; }
+        break;
+
+      case "own2":
+        if(key==="UP") state.own2Page = Math.max(1, state.own2Page-1);
+        else if(key==="DOWN") state.own2Page = Math.min(2, state.own2Page+1);
+        else if(key==="DISP"){ state.screen="list"; }
+        else if(key==="CLR"){ state.screen="list"; }
+        else if(key==="MENU"){ state.screen="mainmenu"; state.cursor=0; }
+        break;
+
+      case "otherDetail":
+        if(key==="UP") state.otherPage = Math.max(1, state.otherPage-1);
+        else if(key==="DOWN") state.otherPage = Math.min(3, state.otherPage+1);
+        else if(key==="CLR"){ state.screen="list"; }
+        break;
+
+      case "mainmenu":
+        if(key==="UP") state.cursor = Math.max(0, state.cursor-1);
+        else if(key==="DOWN") state.cursor = Math.min(3, state.cursor+1);
+        else if(key==="ENT"){
+          if(state.cursor===0){ openVoyageData(); state.screen="voy"; state.voyPage=1; state.cursor=0; }
+          else { state.screen="stub"; }
+        }
+        else if(key==="CLR"){ state.screen="list"; }
+        break;
+
+      case "stub":
+        if(key==="CLR"){ state.screen="mainmenu"; }
+        break;
+
+      case "voy": {
+        const maxCursor = state.voyPage===1?2:state.voyPage===2?1:0;
+        if(key==="UP"){
+          if(state.cursor>0) state.cursor--;
+          else if(state.voyPage>1){ state.voyPage--; state.cursor = state.voyPage===1?2:1; }
+        } else if(key==="DOWN"){
+          if(state.cursor<maxCursor) state.cursor++;
+          else if(state.voyPage<3){ state.voyPage++; state.cursor=0; }
+        } else if(key==="ENT"){
+          if(state.voyPage===1){
+            if(state.cursor===0){ state.navStatusCursor=draft.navStatusIdx; state.screen="navstatus"; }
+            else if(state.cursor===1){ state.textBuf=draft.destination; state.padRow=0; state.padCol=0; state.screen="destination"; }
+            else { state.etaField=0; state.screen="eta"; }
+          } else if(state.voyPage===2){
+            if(state.cursor===0){ state.screen="draught"; }
+            else { state.screen="persons"; }
+          } else {
+            state.typeStep=0; state.typeCursor = shipTypeTable.findIndex(t=>t.code===Math.floor(draft.shipTypeCode/10)*10); if(state.typeCursor<0) state.typeCursor=0;
+            state.screen="shiptype";
+          }
+        } else if(key==="SUB"){ state.cursor=0; state.screen="voysub"; }
+        else if(key==="CLR"){ draft=null; state.screen="mainmenu"; state.cursor=0; }
+        else if(key==="MENU"){ draft=null; state.screen="mainmenu"; state.cursor=0; }
+        break;
+      }
+
+      case "voysub":
+        if(key==="UP" || key==="DOWN") state.cursor = state.cursor===0?1:0;
+        else if(key==="ENT"){
+          if(state.cursor===0){
+            Object.assign(own, {
+              navStatusIdx: draft.navStatusIdx, destination: draft.destination,
+              eta: { ...draft.eta }, draught: draft.draught, persons: draft.persons,
+              shipTypeCode: draft.shipTypeCode, cargoSuffix: draft.cargoSuffix
+            });
+            draft = null;
+            state.screen="voysaved";
+          } else {
+            draft = null;
+            state.screen="mainmenu"; state.cursor=0;
+          }
+        }
+        else if(key==="CLR"){ state.screen="voy"; }
+        break;
+
+      case "voysaved":
+        state.screen="list";
+        break;
+
+      case "navstatus":
+        if(key==="UP") state.navStatusCursor = Math.max(0, state.navStatusCursor-1);
+        else if(key==="DOWN") state.navStatusCursor = Math.min(navStatusList.length-1, state.navStatusCursor+1);
+        else if(key==="ENT"){ draft.navStatusIdx = state.navStatusCursor; state.screen="voy"; state.voyPage=1; state.cursor=0; }
+        else if(key==="CLR"){ state.screen="voy"; }
+        break;
+
+      case "destination":
+        if(key==="UP") state.padRow = Math.max(0, state.padRow-1);
+        else if(key==="DOWN") state.padRow = Math.min(charPad.length-1, state.padRow+1);
+        else if(key==="LEFT") state.padCol = Math.max(0, state.padCol-1);
+        else if(key==="RIGHT") state.padCol = Math.min(charPad[state.padRow].length-1, state.padCol+1);
+        else if(key==="ENT"){
+          const ch = charPad[state.padRow][state.padCol];
+          if(ch==="[OK]"){ draft.destination = state.textBuf.trim() || draft.destination; state.screen="voy"; state.voyPage=1; state.cursor=1; }
+          else if(ch==="[EXIT]"){ state.screen="voy"; state.voyPage=1; state.cursor=1; }
+          else if(ch==="[C]"){ state.textBuf = state.textBuf.slice(0,-1); }
+          else if(ch==="[AC]"){ state.textBuf = ""; }
+          else if(ch==="!"){ state.textBuf += "!"; }
+          else if(state.textBuf.length<20){ state.textBuf += ch; }
+        }
+        else if(key==="CLR"){ state.screen="voy"; }
+        // clamp col when switching rows
+        state.padCol = Math.min(state.padCol, charPad[state.padRow].length-1);
+        break;
+
+      case "eta":
+        if(key==="LEFT") state.etaField = Math.max(0, state.etaField-1);
+        else if(key==="RIGHT") state.etaField = Math.min(3, state.etaField+1);
+        else if(key==="UP" || key==="DOWN"){
+          const dir = key==="UP" ? 1 : -1;
+          const f = state.etaField;
+          if(f===0) draft.eta.mo = ((draft.eta.mo-1+dir+12)%12)+1;
+          else if(f===1) draft.eta.da = ((draft.eta.da-1+dir+31)%31)+1;
+          else if(f===2) draft.eta.hh = (draft.eta.hh+dir+24)%24;
+          else draft.eta.mm = (draft.eta.mm+dir+60)%60;
+        }
+        else if(key==="ENT"){ state.screen="voy"; state.voyPage=1; state.cursor=2; }
+        else if(key==="CLR"){ state.screen="voy"; }
+        break;
+
+      case "draught":
+        if(key==="UP") draft.draught = Math.min(25.5, +(draft.draught+0.1).toFixed(1));
+        else if(key==="DOWN") draft.draught = Math.max(0, +(draft.draught-0.1).toFixed(1));
+        else if(key==="ENT" || key==="CLR"){ state.screen="voy"; state.voyPage=2; state.cursor=0; }
+        break;
+
+      case "persons":
+        if(key==="UP") draft.persons = Math.min(9999, draft.persons+1);
+        else if(key==="DOWN") draft.persons = Math.max(0, draft.persons-1);
+        else if(key==="ENT" || key==="CLR"){ state.screen="voy"; state.voyPage=2; state.cursor=1; }
+        break;
+
+      case "shiptype":
+        if(state.typeStep===0){
+          if(key==="UP") state.typeCursor = Math.max(0, state.typeCursor-1);
+          else if(key==="DOWN") state.typeCursor = Math.min(shipTypeTable.length-1, state.typeCursor+1);
+          else if(key==="ENT"){ draft.shipTypeCode = shipTypeTable[state.typeCursor].code; state.typeStep=1; state.typeCursor = cargoSuffixTable.findIndex(c=>c.code===draft.cargoSuffix); if(state.typeCursor<0) state.typeCursor=0; }
+          else if(key==="CLR"){ state.screen="voy"; state.voyPage=3; state.cursor=0; }
+        } else {
+          if(key==="UP") state.typeCursor = Math.max(0, state.typeCursor-1);
+          else if(key==="DOWN") state.typeCursor = Math.min(cargoSuffixTable.length-1, state.typeCursor+1);
+          else if(key==="ENT"){ draft.cargoSuffix = cargoSuffixTable[state.typeCursor].code; state.screen="voy"; state.voyPage=3; state.cursor=0; }
+          else if(key==="CLR"){ state.typeStep=0; }
+        }
+        break;
+    }
+    render();
+  }
+
+  document.querySelectorAll("[data-key]").forEach(btn=>{
+    btn.addEventListener("click", ()=> handleKey(btn.getAttribute("data-key")));
+  });
+
+  // Dead-reckoning simulation for dynamic sensor data (auto, not manual entry)
+  setInterval(()=>{
+    if(own.sog<=0) return;
+    const cogRad = own.cog*Math.PI/180;
+    const distNm = own.sog*(3/3600);
+    const dLat = (distNm/60)*Math.cos(cogRad);
+    const dLon = (distNm/60)*Math.sin(cogRad)/Math.cos(own.lat*Math.PI/180);
+    own.lat = +(own.lat+dLat).toFixed(5);
+    own.lon = +(own.lon+dLon).toFixed(5);
+    if(state.screen==="own2") render();
+  }, 3000);
+
+  render();
+})();
+</script>
+
+</body>
+</html>
